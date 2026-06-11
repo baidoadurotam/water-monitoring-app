@@ -6,16 +6,12 @@
     <title>Login - Aquarium Water Monitoring</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Animasi Card Masuk */
         @keyframes fadeInUp {
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
         }
         .animate-fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
 
-        /* =========================================================================
-           ANIMASI BARU: PARTIKEL CAHAYA & GELEMBUNG AQUARIUM
-           ========================================================================= */
         .bubble {
             position: absolute;
             bottom: -20px;
@@ -26,7 +22,6 @@
             animation: floatUp 8s infinite ease-in;
         }
 
-        /* Efek Partikel Cahaya Mengambang */
         .glow-particle {
             position: absolute;
             background: radial-gradient(circle, rgba(34, 211, 238, 0.4) 0%, rgba(34, 211, 238, 0) 70%);
@@ -48,9 +43,6 @@
             100% { transform: translateY(-10vh) translateX(100px) scale(1.5); opacity: 0; }
         }
 
-        /* =========================================================================
-           OMBAK DI AREA DASAR
-           ========================================================================= */
         .ocean {
             height: 15%;
             width: 100%;
@@ -89,19 +81,16 @@
 
     <div class="absolute inset-0 w-full h-full overflow-hidden pointer-events-none z-0">
         <div class="absolute inset-0 bg-gradient-to-tr from-cyan-500/10 via-transparent to-blue-500/5 mix-blend-screen"></div>
-
-        <div class="glow-particle w-24 h-24 left-[15%]" style="animation-duration: 14s; animation-delay: 0s;"></div>
+        <div class="glow-particle w-24 h-24 left-[15%]" style="animation-duration: 14s;"></div>
         <div class="glow-particle w-32 h-32 left-[45%]" style="animation-duration: 18s; animation-delay: 3s;"></div>
         <div class="glow-particle w-20 h-20 left-[75%]" style="animation-duration: 12s; animation-delay: 6s;"></div>
         <div class="glow-particle w-40 h-40 left-[85%]" style="animation-duration: 22s; animation-delay: 1s;"></div>
-
-        <div class="bubble w-3 h-3 left-[8%]" style="animation-duration: 6s; animation-delay: 0s;"></div>
+        <div class="bubble w-3 h-3 left-[8%]" style="animation-duration: 6s;"></div>
         <div class="bubble w-5 h-5 left-[23%]" style="animation-duration: 9s; animation-delay: 1.5s;"></div>
         <div class="bubble w-2 h-2 left-[40%]" style="animation-duration: 5s; animation-delay: 0.5s;"></div>
         <div class="bubble w-4 h-4 left-[65%]" style="animation-duration: 10s; animation-delay: 3s;"></div>
         <div class="bubble w-3 h-3 left-[82%]" style="animation-duration: 7s; animation-delay: 2s;"></div>
         <div class="bubble w-6 h-6 left-[92%]" style="animation-duration: 11s; animation-delay: 4s;"></div>
-
         <div class="ocean">
             <div class="wave"></div>
             <div class="wave"></div>
@@ -142,7 +131,7 @@
     <script>
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const username = document.getElementById('username').value;
+            const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value;
             const errorMsg = document.getElementById('error-msg');
             const btnText = document.getElementById('btn-text');
@@ -160,25 +149,30 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
                 });
-                const data = await res.json();
 
-                setTimeout(() => {
-                    if (data.success) {
-                        window.location.href = '/dashboard.html';
-                    } else {
-                        btnText.innerText = "Masuk ke Dashboard";
-                        btnSpinner.classList.add('hidden');
-                        btnSubmit.disabled = false;
-                        errorMsg.innerText = data.message;
-                        errorMsg.classList.remove('hidden');
-                    }
-                }, 800);
+                // Coba parse response sebagai JSON
+                let data;
+                try {
+                    data = await res.json();
+                } catch (e) {
+                    throw new Error('Respons dari server tidak valid (bukan JSON)');
+                }
 
+                if (data.success) {
+                    window.location.href = '/dashboard.html';
+                } else {
+                    btnText.innerText = "Masuk ke Dashboard";
+                    btnSpinner.classList.add('hidden');
+                    btnSubmit.disabled = false;
+                    errorMsg.innerText = data.message || 'Username atau password salah';
+                    errorMsg.classList.remove('hidden');
+                }
             } catch (err) {
+                console.error('Login error:', err);
                 btnText.innerText = "Masuk ke Dashboard";
                 btnSpinner.classList.add('hidden');
                 btnSubmit.disabled = false;
-                errorMsg.innerText = "Gagal terhubung ke server!";
+                errorMsg.innerText = "Gagal terhubung ke server! Periksa koneksi atau apakah server berjalan.";
                 errorMsg.classList.remove('hidden');
             }
         });

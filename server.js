@@ -2,16 +2,33 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const axios = require('axios');
 const path = require('path');
-const cors = require('cors'); // Mengamankan koneksi agar ESP32 tidak terblokir oleh browser
+const cors = require('cors');
 
 const app = express();
 const PORT = 3000;
 
-// Middleware
-app.use(cors()); 
-app.use(express.json());
+// =========================================================================
+// MIDDLEWARE YANG DIPERKUAT
+// =========================================================================
+app.use(cors());
+app.use(express.json({ strict: false, limit: '1mb' })); // Mengizinkan JSON tidak ketat
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Middleware debugging untuk melihat raw body (tidak mengubah fungsi)
+app.use((req, res, next) => {
+    if (req.method === 'POST' && req.path === '/api/login') {
+        console.log('📨 Raw headers:', req.headers['content-type']);
+    }
+    next();
+});
+
+// =========================================================================
+// REDIRECT ROOT KE LOGIN PAGE
+// =========================================================================
+app.get('/', (req, res) => {
+    res.redirect('/login.html');
+});
 
 // =========================================================================
 // CONFIGURATION: TELEGRAM BOT
@@ -44,7 +61,6 @@ const db = new sqlite3.Database('./monitoring_air_aquarium.db', (err) => {
     }
 });
 
-// Membuat tabel riwayat jika belum ada saat aplikasi dijalankan
 db.run(`CREATE TABLE IF NOT EXISTS sensor_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     suhu REAL,
@@ -53,14 +69,12 @@ db.run(`CREATE TABLE IF NOT EXISTS sensor_logs (
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 )`);
 
-// Variabel memori lokal untuk menyimpan pembacaan data terakhir
 let lastSensorData = {
     suhu: null,
     kekeruhan: null,
     timestamp: null
 };
 
-// Flag pembantu anti-spam pesan Telegram
 let statusSuhuSebelumnyaAman = true;
 let statusKekeruhanSebelumnyaAman = true;
 
@@ -69,25 +83,57 @@ let statusKekeruhanSebelumnyaAman = true;
 // =========================================================================
 
 /**
- * 1. ENDPOINT POST: MENERIMA DATA DARI ESP32
- * URL Tujuan di ESP32: http://<IP_LAPTOP_ANDA>:3000/api/sensors
+ * 1. ENDPOINT LOGIN (DIPERBAIKI)
+ */
+app.post('/api/login', (req, res) => {
+    console.log("📥 Request login - Body:", req.body);
+    console.log("📥 Request login - Query:", req.query);
+
+    // Coba ambil data dari body atau query (untuk kompatibilitas)
+    let username = req.body?.username;
+    let password = req.body?.password;
+
+    // Jika masih undefined, coba dari query string
+    if (!username || !password) {
+        username = req.query?.username;
+        password = req.query?.password;
+    }
+
+    // Jika masih kosong, kirim error jelas
+    if (!username || !password) {
+        return res.status(400).json({
+            success: false,
+            message: "Data login tidak lengkap atau format salah. Harap kirim JSON dengan field username dan password."
+        });
+    }
+
+    const validUsername = 'admin';
+    const validPassword = 'admin123';
+
+    if (username === validUsername && password === validPassword) {
+        return res.json({ success: true, message: 'Login berhasil' });
+    } else {
+        return res.json({ success: false, message: 'Username atau password salah' });
+    }
+});
+
+/**
+ * 2. ENDPOINT POST: MENERIMA DATA DARI ESP32
  */
 app.post('/api/sensors', (req, res) => {
-    // Mendukung pengiriman lewat JSON Body (req.body) maupun Parameter URL (req.query)
     const suhu = req.body.suhu !== undefined ? req.body.suhu : req.query.suhu;
     const kekeruhan = req.body.kekeruhan !== undefined ? req.body.kekeruhan : req.query.kekeruhan;
 
     if (suhu === undefined || kekeruhan === undefined) {
-        return res.status(400).json({ 
-            success: false, 
-            message: "Gagal! Data suhu atau kekeruhan tidak terkirim." 
+        return res.status(400).json({
+            success: false,
+            message: "Gagal! Data suhu atau kekeruhan tidak terkirim."
         });
     }
 
     const valSuhu = parseFloat(suhu);
     const valTurbid = parseInt(kekeruhan);
 
-    // Hitung Status Ambang Batas Aman
     let suhuAman = valSuhu >= 24 && valSuhu <= 29;
     let airBersih = valTurbid <= 25;
     let statusLingkungan = "AMAN";
@@ -100,22 +146,17 @@ app.post('/api/sensors', (req, res) => {
 
     const waktuSekarang = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    // Simpan ke RAM sementara untuk dashboard real-time
     lastSensorData = {
         suhu: valSuhu,
         kekeruhan: valTurbid,
         timestamp: waktuSekarang
     };
 
-    // SIMPAN PERMANEN KE DATABASE SQLITE
     const queryInsert = `INSERT INTO sensor_logs (suhu, kekeruhan, status) VALUES (?, ?, ?)`;
     db.run(queryInsert, [valSuhu, valTurbid, statusLingkungan], function(err) {
-        if (err) {
-            console.error("❌ Gagal menyimpan log ke database:", err.message);
-        }
+        if (err) console.error("❌ Gagal menyimpan log ke database:", err.message);
     });
 
-    // PENGIRIMAN NOTIFIKASI TELEGRAM (Sistem Anti-Spam)
     if (!airBersih && statusKekeruhanSebelumnyaAman) {
         sendTelegramNotification(`🚨 *MONITORING AIR AQUARIUM* 🚨\n\n⚠️ Air Aquarium Mendeteksi Kekeruhan Tinggi!\n💧 Kekeruhan: *${valTurbid} NTU* (Batas aman < 25 NTU)\n📢 *Saran:* Periksa kondisi saringan filter fisik.`);
         statusKekeruhanSebelumnyaAman = false;
@@ -131,15 +172,15 @@ app.post('/api/sensors', (req, res) => {
     }
 
     console.log(`📥 Data Masuk Asli dari ESP32 -> Suhu: ${valSuhu}°C, Kekeruhan: ${valTurbid} NTU [${statusLingkungan}]`);
-    
-    return res.status(200).json({ 
-        success: true, 
-        message: "Data ESP32 berhasil diterima oleh Server!" 
+
+    return res.status(200).json({
+        success: true,
+        message: "Data ESP32 berhasil diterima oleh Server!"
     });
 });
 
 /**
- * 2. ENDPOINT GET: Diakses dashboard untuk grafik dan panel atas
+ * 3. ENDPOINT GET: Data sensor terakhir
  */
 app.get('/api/sensors', (req, res) => {
     if (lastSensorData.suhu === null) {
@@ -149,26 +190,22 @@ app.get('/api/sensors', (req, res) => {
 });
 
 /**
- * 3. ENDPOINT GET ALL HISTORIES: Mengambil riwayat lama saat halaman dimuat ulang
+ * 4. ENDPOINT GET HISTORY
  */
 app.get('/api/sensors/history', (req, res) => {
     const querySelect = `SELECT timestamp as "Waktu Record", suhu as "Suhu (C)", kekeruhan as "Kekeruhan (NTU)", status as "Status" FROM sensor_logs ORDER BY id DESC LIMIT 200`;
     db.all(querySelect, [], (err, rows) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
-        }
+        if (err) return res.status(500).json({ error: err.message });
         return res.json(rows);
     });
 });
 
 /**
- * 4. ENDPOINT DELETE: Mengosongkan data permanen di database
+ * 5. ENDPOINT DELETE HISTORY
  */
 app.delete('/api/sensors/history', (req, res) => {
     db.run(`DELETE FROM sensor_logs`, (err) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
-        }
+        if (err) return res.status(500).json({ error: err.message });
         console.log("🗑️ Seluruh isi database sensor_logs telah dikosongkan!");
         return res.json({ message: "Database berhasil dibersihkan!" });
     });
