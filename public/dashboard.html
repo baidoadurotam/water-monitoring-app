@@ -3,108 +3,496 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Realtime Kualitas Air</title>
+    <title>Dashboard - Monitoring Air Aquarium</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        
+        .bg-bubble {
+            position: absolute;
+            bottom: -10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            animation: floatUpDashboard 10s infinite linear;
+        }
+        @keyframes floatUpDashboard {
+            0% { transform: translateY(0) scale(1); opacity: 0; }
+            10% { opacity: 0.4; }
+            90% { opacity: 0.4; }
+            100% { transform: translateY(-100vh) translateX(30px) scale(0.5); opacity: 0; }
+        }
+    </style>
 </head>
-<body class="bg-slate-100 font-sans">
-    <div class="flex h-screen">
-        <div class="w-64 bg-slate-800 text-white p-6 flex flex-col justify-between">
-            <div>
-                <h1 class="text-xl font-bold mb-8 text-blue-400">🌊 H2O Monitor</h1>
-                <nav class="space-y-2">
-                    <a href="#" class="block px-4 py-2.5 bg-slate-700 rounded-lg font-medium">Dashboard Realtime</a>
-                </nav>
-            </div>
-            <a href="/login.html" class="block px-4 py-2 text-center bg-red-600 hover:bg-red-700 rounded-lg font-bold transition">Logout</a>
-        </div>
+<body class="bg-gradient-to-b from-slate-950 via-blue-950 to-slate-950 min-h-screen text-slate-100 relative overflow-x-hidden font-sans">
 
-        <div class="flex-1 p-8 overflow-y-auto">
-            <h2 class="text-3xl font-bold text-slate-800 mb-6">Status Kualitas Air</h2>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <p class="text-sm font-semibold text-slate-500 uppercase">Suhu Air</p>
-                    <p id="txt-suhu" class="text-4xl font-extrabold text-red-500 mt-2">0.0 °C</p>
-                </div>
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <p class="text-sm font-semibold text-slate-500 uppercase">Kekeruhan (Turbidity)</p>
-                    <p id="txt-keruh" class="text-4xl font-extrabold text-blue-500 mt-2">0.0 NTU</p>
-                </div>
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <p class="text-sm font-semibold text-slate-500 uppercase">Indeks Kualitas</p>
-                    <div id="badge-kualitas" class="inline-block px-3 py-1 rounded-full text-sm font-bold bg-green-100 text-green-700 mt-3">Mengambil Data...</div>
-                </div>
-            </div>
-
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-8">
-                <h3 class="text-lg font-bold text-slate-700 mb-4">Grafik Tren Realtime (Analog)</h3>
-                <div class="h-72">
-                    <canvas id="realtimeChart"></canvas>
-                </div>
-            </div>
-        </div>
+    <div class="absolute inset-0 overflow-hidden pointer-events-none z-0">
+        <div class="bg-bubble w-2 h-2 left-[5%]" style="animation-duration: 7s;"></div>
+        <div class="bg-bubble w-4 h-4 left-[25%]" style="animation-duration: 12s; animation-delay: 2s;"></div>
+        <div class="bg-bubble w-3 h-3 left-[75%]" style="animation-duration: 9s; animation-delay: 4s;"></div>
+        <div class="bg-bubble w-2 h-2 left-[90%]" style="animation-duration: 6s; animation-delay: 1s;"></div>
     </div>
 
+    <!-- NAVIGATION BAR -->
+    <nav class="bg-slate-900/50 backdrop-blur-md border-b border-white/10 sticky top-0 z-50 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center space-x-3">
+            <span class="text-2xl">🐠</span>
+            <div>
+                <h1 class="text-lg font-bold tracking-wide bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">Monitoring Air Aquarium</h1>
+                <p class="text-xs text-slate-400">Aquarium Ecosystem Monitor</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-4">
+            <span id="user-display" class="text-sm bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl text-cyan-300 font-medium">👋 Admin</span>
+            <button onclick="logout()" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-4 py-1.5 rounded-xl text-sm font-semibold transition-all duration-200">
+                Keluar
+            </button>
+        </div>
+    </nav>
+
+    <!-- MAIN CONTENT -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10 space-y-6">
+        
+        <!-- STATUS PANEL -->
+        <div class="bg-slate-900/40 backdrop-blur-md border border-white/10 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-4 animate-fade-in">
+            <div class="flex items-center space-x-3">
+                <div id="connection-indicator" class="w-3 h-3 rounded-full bg-amber-500 animate-pulse"></div>
+                <div>
+                    <span class="text-xs text-slate-400 font-medium block">Status Jaringan Sensor:</span>
+                    <span id="connection-status-text" class="text-sm font-bold text-amber-400">Mengecek Sensor...</span>
+                </div>
+            </div>
+
+            <div class="flex items-center bg-slate-950/60 border border-white/5 px-4 py-2 rounded-xl">
+                <span class="text-xs text-slate-300 font-semibold mr-3">Mode Simulasi Otomatis</span>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="simulation-toggle" class="sr-only peer" checked onchange="toggleSimulationMode()">
+                    <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-500 peer-checked:after:bg-white"></div>
+                </label>
+            </div>
+        </div>
+        
+        <!-- SYSTEM RECOMMENDATION -->
+        <div class="bg-gradient-to-r from-slate-900/80 to-blue-950/40 backdrop-blur-lg border border-white/10 p-6 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in" style="animation-delay: 0.1s;">
+            <div class="space-y-2">
+                <p class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Analisis Sistem Saat Ini</p>
+                <h3 class="text-2xl font-bold text-white">Status Ekosistem Aquarium</h3>
+                <p id="system-recommendation" class="text-sm text-cyan-200/80">Sistem sedang membaca sensor...</p>
+            </div>
+            <div id="status-badge" class="px-5 py-3 rounded-2xl text-center font-bold text-lg border bg-slate-950/50 flex flex-col items-center justify-center min-w-[130px]">
+                <span id="status-text">Memuat...</span>
+            </div>
+        </div>
+
+        <!-- CARDS -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-slate-900/60 backdrop-blur-lg border border-white/10 p-6 rounded-2xl relative overflow-hidden animate-fade-in" style="animation-delay: 0.2s;">
+                <div class="absolute top-0 left-0 w-2 h-full bg-orange-500"></div>
+                <div class="flex justify-between items-center mb-4">
+                    <span class="text-sm font-semibold tracking-wide text-slate-400">Temperatur / Suhu Air</span>
+                    <span class="text-2xl text-orange-500">🌡️</span>
+                </div>
+                <div class="flex items-baseline space-x-2">
+                    <span id="temp-value" class="text-5xl font-black text-white tracking-tight">00.0</span>
+                    <span class="text-2xl text-orange-400 font-bold">°C</span>
+                </div>
+                <div class="mt-4 pt-4 border-t border-white/5 text-xs text-slate-400 flex justify-between">
+                    <span>Batas Ideal: 24°C - 29°C</span>
+                    <span id="temp-status" class="font-medium">Memuat...</span>
+                </div>
+            </div>
+
+            <div class="bg-slate-900/60 backdrop-blur-lg border border-white/10 p-6 rounded-2xl relative overflow-hidden animate-fade-in" style="animation-delay: 0.3s;">
+                <div class="absolute top-0 left-0 w-2 h-full bg-cyan-500"></div>
+                <div class="flex justify-between items-center mb-4">
+                    <span class="text-sm font-semibold tracking-wide text-slate-400">Tingkat Kekeruhan (Turbidity)</span>
+                    <span class="text-2xl text-cyan-500">💧</span>
+                </div>
+                <div class="flex items-baseline space-x-2">
+                    <span id="turbidity-value" class="text-5xl font-black text-white tracking-tight">00</span>
+                    <span class="text-xl text-cyan-400 font-bold">NTU</span>
+                </div>
+                <div class="mt-4 pt-4 border-t border-white/5 text-xs text-slate-400 flex justify-between">
+                    <span>Batas Air Bersih: &lt; 25 NTU</span>
+                    <span id="turbidity-status" class="font-medium">Memuat...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- CHART -->
+        <div class="bg-slate-900/60 backdrop-blur-lg border border-white/10 p-6 rounded-2xl animate-fade-in" style="animation-delay: 0.4s;">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h3 class="text-base font-bold text-white">Grafik Tren Real-Time</h3>
+                    <p class="text-xs text-slate-400">Memantau fluktuasi data dalam 10 pencatatan terakhir</p>
+                </div>
+                <span class="text-xs px-2 py-1 bg-cyan-500/10 text-cyan-400 rounded border border-cyan-500/20 font-mono animate-pulse">LIVE</span>
+            </div>
+            <div class="h-64 w-full">
+                <canvas id="realtimeChart"></canvas>
+            </div>
+        </div>
+
+        <!-- LOG TABLE -->
+        <div class="bg-slate-900/60 backdrop-blur-lg border border-white/10 p-6 rounded-2xl space-y-4 animate-fade-in" style="animation-delay: 0.5s;">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div>
+                    <h3 class="text-base font-bold text-white">Log Riwayat Monitoring</h3>
+                    <p class="text-xs text-slate-400">Menampilkan rekaman data berkala dengan pembagian halaman</p>
+                </div>
+                
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="clearHistoryLog()" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-2 transition-all duration-200">
+                        <span>🗑️</span>
+                        <span>Hapus Riwayat</span>
+                    </button>
+
+                    <button onclick="downloadExcelLog()" class="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center space-x-2 shadow-lg shadow-emerald-950/50 transition-all duration-200">
+                        <span>📊</span>
+                        <span>Unduh Riwayat (.xlsx)</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto border border-white/5 rounded-xl bg-slate-950/40">
+                <table class="min-w-full divide-y divide-white/5 text-sm text-left">
+                    <thead class="bg-slate-900/80 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                        <tr>
+                            <th class="px-6 py-3.5">Waktu / Jam</th>
+                            <th class="px-6 py-3.5">Temperatur (Suhu)</th>
+                            <th class="px-6 py-3.5">Kekeruhan (Turbidity)</th>
+                            <th class="px-6 py-3.5">Status Lingkungan</th>
+                            <th class="px-6 py-3.5">Sumber Data</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table-body" class="divide-y divide-white/5 text-slate-300">
+                        <tr id="empty-table-row">
+                            <td colspan="5" class="px-6 py-8 text-center text-slate-500 text-xs">Belum ada data rekaman masuk...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- PAGINATION KONTROL -->
+            <div class="flex items-center justify-between pt-2 border-t border-white/5 text-xs">
+                <div class="text-slate-400">
+                    Menampilkan <span id="page-start-index" class="font-bold text-white">0</span> - <span id="page-end-index" class="font-bold text-white">0</span> dari <span id="total-logs-count" class="font-bold text-white">0</span> log data
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button onclick="previousPage()" id="btn-prev" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 rounded-lg text-slate-300 transition font-medium" disabled>
+                        Sebelumnya
+                    </button>
+                    <span class="text-slate-400 font-medium">Halaman <span id="current-page-text" class="text-cyan-400 font-bold">1</span></span>
+                    <button onclick="nextPage()" id="btn-next" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 rounded-lg text-slate-300 transition font-medium" disabled>
+                        Selanjutnya
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- JAVASCRIPT PROGRAM -->
     <script>
-        // Inisialisasi Chart.js
+        let isSimulationActive = true;
+        let monitoringHistoryLogs = [];
+        let currentPage = 1;
+        const rowsPerPage = 10; 
+
         const ctx = document.getElementById('realtimeChart').getContext('2d');
-        const configChart = {
+        const maxDataPoints = 10;
+        
+        const chartData = {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Suhu (°C)',
+                    data: [],
+                    borderColor: '#f97316',
+                    backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    yAxisID: 'y-temp'
+                },
+                {
+                    label: 'Kekeruhan (NTU)',
+                    data: [],
+                    borderColor: '#06b6d4',
+                    backgroundColor: 'rgba(6, 182, 212, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    yAxisID: 'y-turbid'
+                }
+            ]
+        };
+
+        const config = {
             type: 'line',
-            data: {
-                labels: [],
-                datasets: [
-                    { label: 'Suhu (°C)', data: [], borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', tension: 0.3, yAxisID: 'y' },
-                    { label: 'Kekeruhan (NTU)', data: [], borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', tension: 0.3, yAxisID: 'y1' }
-                ]
-            },
+            data: chartData,
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
                 scales: {
-                    y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Suhu (°C)' } },
-                    y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Kekeruhan (NTU)' } }
+                    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b' } },
+                    'y-temp': {
+                        type: 'linear',
+                        position: 'left',
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { color: '#f97316' },
+                        title: { display: true, text: 'Suhu °C', color: '#f97316' }
+                    },
+                    'y-turbid': {
+                        type: 'linear',
+                        position: 'right',
+                        grid: { drawOnChartArea: false },
+                        ticks: { color: '#06b6d4' },
+                        title: { display: true, text: 'Kekeruhan NTU', color: '#06b6d4' }
+                    }
                 }
             }
         };
-        const airChart = new Chart(ctx, configChart);
 
-        // HUBUNGKAN WEBSOCKET KE SERVER (PORT 3000)
-        // Karena dijalankan di localhost/server yang sama, kita pakai window.location.host
-        const ws = new WebSocket(`ws://${window.location.host}`);
+        const realtimeChart = new Chart(ctx, config);
 
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            const waktuLokal = new Date(data.timestamp * 1000).toLocaleTimeString();
+        function toggleSimulationMode() {
+            isSimulationActive = document.getElementById('simulation-toggle').checked;
+            const statusText = document.getElementById('connection-status-text');
+            const indicator = document.getElementById('connection-indicator');
 
-            // 1. Update Tampilan Digital Indikator
-            document.getElementById('txt-suhu').innerText = data.suhu.toFixed(1) + " °C";
-            document.getElementById('txt-keruh').innerText = data.kekeruhan.toFixed(1) + " NTU";
+            if (!isSimulationActive) {
+                statusText.innerText = "Mencoba Menghubungkan ke ESP32...";
+                statusText.className = "text-sm font-bold text-cyan-400";
+                indicator.className = "w-3 h-3 rounded-full bg-cyan-500 animate-ping";
+            }
+            fetchSensorData();
+        }
 
-            // 2. Logika Hitung Indeks Kualitas Air
-            const badge = document.getElementById('badge-kualitas');
-            if (data.kekeruhan > 50 || data.suhu > 30) {
-                badge.innerText = "🚨 KUALITAS BURUK / KERUH";
-                badge.className = "inline-block px-3 py-1 rounded-full text-sm font-bold bg-red-100 text-red-700 mt-3";
+        async function loadHistoryFromServer() {
+            try {
+                const response = await fetch('/api/sensors/history');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.length > 0) {
+                        monitoringHistoryLogs = data;
+                        displayHistoryTable();
+                    }
+                }
+            } catch (error) {
+                console.error("Gagal memuat data riwayat lama dari database:", error);
+            }
+        }
+
+        async function fetchSensorData() {
+            const statusText = document.getElementById('connection-status-text');
+            const indicator = document.getElementById('connection-indicator');
+
+            try {
+                const response = await fetch('/api/sensors'); 
+                if (!response.ok) throw new Error("Offline");
+                const data = await response.json();
+                
+                statusText.innerText = "TERHUBUNG KE SENSOR ESP32 (REAL-TIME)";
+                statusText.className = "text-sm font-bold text-green-400";
+                indicator.className = "w-3 h-3 rounded-full bg-green-500";
+                
+                updateDashboardUI(data.suhu, data.kekeruhan, "Sensor Fisik");
+            } catch (err) {
+                if (isSimulationActive) {
+                    statusText.innerText = "ESP32 TERPUTUS - AKTIF MENGGUNAKAN SIMULASI DATA TIER";
+                    statusText.className = "text-sm font-bold text-amber-400";
+                    indicator.className = "w-3 h-3 rounded-full bg-amber-500 animate-pulse";
+
+                    const mockSuhu = (25 + Math.random() * 4).toFixed(1);
+                    const mockKekeruhan = Math.floor(12 + Math.random() * 20);
+                    updateDashboardUI(mockSuhu, mockKekeruhan, "Simulasi");
+                } else {
+                    statusText.innerText = "ERROR: SENSOR OFF-LINE & SIMULASI MATI";
+                    statusText.className = "text-sm font-bold text-red-500";
+                    indicator.className = "w-3 h-3 rounded-full bg-red-600";
+
+                    document.getElementById('temp-value').innerText = "--.-";
+                    document.getElementById('turbidity-value').innerText = "--";
+                    document.getElementById('temp-status').innerText = "Sensor Mati ❌";
+                    document.getElementById('temp-status').className = "text-red-500";
+                    document.getElementById('turbidity-status').innerText = "Sensor Mati ❌";
+                    document.getElementById('turbidity-status').className = "text-red-500";
+                    
+                    document.getElementById('status-text').innerText = "OFFLINE";
+                    document.getElementById('status-badge').className = "px-5 py-3 rounded-2xl text-center font-bold text-lg border bg-red-950/40 border-red-800 text-red-500 min-w-[130px]";
+                    document.getElementById('system-recommendation').innerText = "Sistem gagal membaca hardware. Periksa daya listrik dan jaringan Wi-Fi ESP32 Anda.";
+                }
+            }
+        }
+
+        function updateDashboardUI(suhu, kekeruhan, sumber) {
+            const valSuhu = parseFloat(suhu);
+            const valTurbid = parseInt(kekeruhan);
+
+            document.getElementById('temp-value').innerText = valSuhu;
+            document.getElementById('turbidity-value').innerText = valTurbid;
+
+            let suhuAman = valSuhu >= 24 && valSuhu <= 29;
+            let airBersih = valTurbid <= 25;
+
+            const badge = document.getElementById('status-badge');
+            const statusText = document.getElementById('status-text');
+            const recText = document.getElementById('system-recommendation');
+
+            document.getElementById('temp-status').innerText = suhuAman ? "Normal ✅" : "Tidak Normal ⚠️";
+            document.getElementById('temp-status').className = suhuAman ? "text-green-400" : "text-orange-400";
+            
+            document.getElementById('turbidity-status').innerText = airBersih ? "Jernih ✅" : "Keruh ⚠️";
+            document.getElementById('turbidity-status').className = airBersih ? "text-green-400" : "text-cyan-400";
+
+            let environmentalStatus = "AMAN";
+            if (!airBersih) {
+                environmentalStatus = "KERUH";
+                statusText.innerText = "KERUH";
+                badge.className = "px-5 py-3 rounded-2xl text-center font-bold text-lg border bg-amber-500/10 border-amber-500 text-amber-400 min-w-[130px]";
+                recText.innerText = "Air mendeteksi kekeruhan tinggi. Disarankan untuk memeriksa kondisi kain filter fisik.";
+            } else if (!suhuAman) {
+                environmentalStatus = "BAHAYA";
+                statusText.innerText = "BAHAYA";
+                badge.className = "px-5 py-3 rounded-2xl text-center font-bold text-lg border bg-red-500/10 border-red-500 text-red-400 min-w-[130px]";
+                recText.innerText = "Suhu berada di luar ambang batas wajar ekosistem ikan hias air tawar!";
             } else {
-                badge.innerText = "✅ KUALITAS BAIK / JERNIH";
-                badge.className = "inline-block px-3 py-1 rounded-full text-sm font-bold bg-green-100 text-green-700 mt-3";
+                statusText.innerText = "AMAN";
+                badge.className = "px-5 py-3 rounded-2xl text-center font-bold text-lg border bg-emerald-500/10 border-emerald-500 text-emerald-400 min-w-[130px]";
+                recText.innerText = "Kondisi air sangat ideal untuk ikan hias Anda. Pertahankan lingkungan ini!";
             }
 
-            // 3. Update Grafik Analog (Maksimal menampilkan 10 data berjalan)
-            if (airChart.data.labels.length > 10) {
-                airChart.data.labels.shift();
-                airChart.data.datasets[0].data.shift();
-                airChart.data.datasets[1].data.shift();
+            const sekarang = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            
+            if (chartData.labels.length >= maxDataPoints) {
+                chartData.labels.shift();
+                chartData.datasets[0].data.shift();
+                chartData.datasets[1].data.shift();
+            }
+            chartData.labels.push(sekarang);
+            chartData.datasets[0].data.push(valSuhu);
+            chartData.datasets[1].data.push(valTurbid);
+            realtimeChart.update();
+
+            // Tambahkan baris baru ke memori teratas hanya jika tipe datanya dikirim dari ESP32 (Agar tidak menduplikasi database yang di-load)
+            if(sumber === "Sensor Fisik" || monitoringHistoryLogs.length === 0 || isSimulationActive) {
+                monitoringHistoryLogs.unshift({
+                    "Waktu Record": sekarang,
+                    "Suhu (C)": valSuhu,
+                    "Kekeruhan (NTU)": valTurbid,
+                    "Status": environmentalStatus,
+                    "Sumber Data": sumber
+                });
             }
 
-            airChart.data.labels.push(waktuLokal);
-            airChart.data.datasets[0].data.push(data.suhu);
-            airChart.data.datasets[1].data.push(data.kekeruhan);
-            airChart.update();
+            displayHistoryTable();
+        }
+
+        function displayHistoryTable() {
+            const tableBody = document.getElementById('history-table-body');
+            tableBody.innerHTML = ""; 
+
+            if (monitoringHistoryLogs.length === 0) {
+                tableBody.innerHTML = `
+                    <tr id="empty-table-row">
+                        <td colspan="5" class="px-6 py-8 text-center text-slate-500 text-xs">Belum ada data rekaman masuk...</td>
+                    </tr>`;
+                updatePaginationControls(0, 0, 0);
+                return;
+            }
+
+            const startIndex = (currentPage - 1) * rowsPerPage;
+            const endIndex = Math.min(startIndex + rowsPerPage, monitoringHistoryLogs.length);
+            const paginatedItems = monitoringHistoryLogs.slice(startIndex, endIndex);
+
+            paginatedItems.forEach(item => {
+                let statusColor = "text-emerald-400";
+                if (item["Status"] === "KERUH") statusColor = "text-amber-400";
+                if (item["Status"] === "BAHAYA") statusColor = "text-red-400";
+
+                const row = document.createElement('tr');
+                row.className = "hover:bg-white/5 transition-colors duration-150 font-mono text-xs";
+                row.innerHTML = `
+                    <td class="px-6 py-3 font-semibold text-slate-400">${item["Waktu Record"]}</td>
+                    <td class="px-6 py-3 text-orange-400 font-bold">${item["Suhu (C)"]} °C</td>
+                    <td class="px-6 py-3 text-cyan-400 font-bold">${item["Kekeruhan (NTU)"]} NTU</td>
+                    <td class="px-6 py-3 font-bold ${statusColor}">${item["Status"]}</td>
+                    <td class="px-6 py-3 text-slate-500 font-sans">${item["Sumber Data"] || 'Database Server'}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+
+            updatePaginationControls(startIndex + 1, endIndex, monitoringHistoryLogs.length);
+        }
+
+        function updatePaginationControls(start, end, total) {
+            document.getElementById('page-start-index').innerText = start;
+            document.getElementById('page-end-index').innerText = end;
+            document.getElementById('total-logs-count').innerText = total;
+            document.getElementById('current-page-text').innerText = currentPage;
+
+            const totalPages = Math.ceil(total / rowsPerPage);
+            document.getElementById('btn-prev').disabled = (currentPage === 1 || total === 0);
+            document.getElementById('btn-next').disabled = (currentPage === totalPages || total === 0);
+        }
+
+        void function previousPage() { if (currentPage > 1) { currentPage--; displayHistoryTable(); } }();
+        void function nextPage() { const totalPages = Math.ceil(monitoringHistoryLogs.length / rowsPerPage); if (currentPage < totalPages) { currentPage++; displayHistoryTable(); } }();
+
+        async function clearHistoryLog() {
+            if (monitoringHistoryLogs.length === 0) {
+                alert("Riwayat log sudah dalam kondisi kosong!");
+                return;
+            }
+
+            const confirmClear = confirm("Apakah Anda yakin ingin menghapus seluruh log data riwayat di browser DAN database server secara permanen?");
+            if (confirmClear) {
+                try {
+                    const response = await fetch('/api/sensors/history', { method: 'DELETE' });
+                    if (response.ok) {
+                        monitoringHistoryLogs = []; 
+                        currentPage = 1;           
+                        displayHistoryTable();     
+                        alert("Seluruh data log riwayat di server dan database berhasil dibersihkan!");
+                    } else {
+                        alert("Gagal menghapus database di sisi server.");
+                    }
+                } catch (error) {
+                    console.error("Error:", error);
+                    alert("Terjadi kesalahan jaringan.");
+                }
+            }
+        }
+
+        function downloadExcelLog() {
+            if (monitoringHistoryLogs.length === 0) {
+                alert("Gagal mengunduh! Belum ada log data sensor yang terekam.");
+                return;
+            }
+
+            const workbook = XLSX.utils.book_new();
+            const worksheet = XLSX.utils.json_to_sheet(monitoringHistoryLogs);
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Riwayat Monitor Air");
+            
+            const tanggal = new Date().toISOString().slice(0,10);
+            const namaFile = `Riwayat_Monitoring_Air_Aquarium_${tanggal}.xlsx`;
+            XLSX.writeFile(workbook, namaFile);
+        }
+
+        function logout() { window.location.href = 'login.html'; }
+
+        // EKSEKUSI UTAMA SAAT HALAMAN DIBUKA
+        window.onload = async function() {
+            await fetchSensorData(); 
+            await loadHistoryFromServer(); 
         };
 
-        ws.onerror = (err) => console.error("Koneksi WebSocket Error:", err);
+        setInterval(fetchSensorData, 3000);
     </script>
 </body>
 </html>

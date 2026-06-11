@@ -1,113 +1,179 @@
 const express = require('express');
-const mqtt = require('mqtt');
-const { InfluxDB, Point } = require('@influxdata/influxdb-client');
-const WebSocket = require('ws');
+const sqlite3 = require('sqlite3').verbose();
+const axios = require('axios');
 const path = require('path');
+const cors = require('cors'); // Mengamankan koneksi agar ESP32 tidak terblokir oleh browser
 
 const app = express();
+const PORT = 3000;
+
+// Middleware
+app.use(cors()); 
 app.use(express.json());
-// Mengizinkan Express membaca file statis (HTML, JS, CSS) dari folder 'public'
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ==========================================
-// 1. KONFIGURASI INFLUXDB (LAPTOP 1)
-// ==========================================
-const url = 'http://192.168.100.211:8086'; 
-const token = 's0zCvnqqEjbw_1stSHAin7ZrpJeRrVUgEY31ajJqk2bzjNiuDVrSvfwEZ15y_RWqKJrQphxhUKVMJjEYWnHavQ==';
-const org = 'water-monitoring';
-const bucket = 'water-monitoring';
+// =========================================================================
+// CONFIGURATION: TELEGRAM BOT
+// =========================================================================
+const TELEGRAM_TOKEN = '8566066747:AAGEqMBRazpCQ46vF61eSBch9ZOFiE-QmUY';
+const TELEGRAM_CHAT_ID = '1070417853';
 
-const influxDB = new InfluxDB({ url, token });
-const writeApi = influxDB.getWriteApi(org, bucket, 's'); // 's' artinya menggunakan timestamp detik
-
-// ==========================================
-// 2. KONFIGURASI MQTT BROKER (LAPTOP 1)
-// ==========================================
-const mqttClient = mqtt.connect('mqtt://192.168.100.211:1883');
-
-mqttClient.on('connect', () => {
-    console.log('Subscribed & Terhubung ke MQTT Broker di Laptop 1');
-    mqttClient.subscribe('monitoring/air');
-});
-
-// ==========================================
-// 3. WEBSOCKET SERVER (UNTUK DASHBOARD REALTIME)
-// ==========================================
-const wss = new WebSocket.Server({ noServer: true });
-
-// Logika ketika data masuk dari ESP32 via MQTT
-mqttClient.on('message', (topic, message) => {
+async function sendTelegramNotification(message) {
+    const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
     try {
-        const data = JSON.parse(message.toString());
-        console.log("Data Diterima dari ESP32:", data);
-
-        // A. Simpan ke InfluxDB
-        const point = new Point('kualitas_air')
-            .tag('device_id', data.id)
-            .floatField('suhu', parseFloat(data.suhu))
-            .floatField('kekeruhan', parseFloat(data.kekeruhan))
-            .timestamp(data.timestamp); // Menggunakan timestamp dari ESP32
-
-        writeApi.writePoint(point);
-        writeApi.flush();
-
-        // B. Kirim Realtime ke Browser via WebSocket
-        wss.clients.forEach(client => {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify(data));
-            }
+        await axios.post(url, {
+            chat_id: TELEGRAM_CHAT_ID,
+            text: message,
+            parse_mode: 'Markdown'
         });
-    } catch (err) {
-        console.error("Gagal memproses data MQTT:", err);
+        console.log("👉 Notifikasi Telegram berhasil dikirim!");
+    } catch (error) {
+        console.error("❌ Gagal mengirim notifikasi Telegram:", error.message);
     }
-});
+}
 
-// ==========================================
-// 4. API & ROUTING (LOGIN & HISTORY)
-// ==========================================
-// Endpoint Login Sederhana
-app.post('/api/login', (req, res) => {
-    const { username, password } = req.body;
-    if (username === 'admin' && password === 'admin123') {
-        res.json({ success: true });
+// =========================================================================
+// DATABASE: SQLITE CONFIGURATION
+// =========================================================================
+const db = new sqlite3.Database('./monitoring_air_aquarium.db', (err) => {
+    if (err) {
+        console.error("❌ Gagal memuat database SQLite:", err.message);
     } else {
-        res.status(401).json({ success: false, message: 'Username atau Password Salah!' });
+        console.log("💾 Terhubung ke database SQLite (monitoring_air_aquarium.db)!");
     }
 });
 
-// Endpoint Ambil Riwayat Data dari InfluxDB
-app.get('/api/history', async (req, res) => {
-    const queryApi = influxDB.getQueryApi(org);
-    // Query Flux untuk mengambil data 1 jam terakhir
-    const fluxQuery = `from(bucket: "${bucket}") 
-        |> range(start: -1h) 
-        |> filter(fn: (r) => r["_measurement"] == "kualitas_air")`;
-    
-    let results = [];
-    try {
-        queryApi.queryRows(fluxQuery, {
-            next(row, tableMeta) {
-                const o = tableMeta.toObject(row);
-                results.push({ waktu: o._time, objek: o._field, nilai: o._value });
-            },
-            error(error) {
-                res.status(500).json({ error: error.message });
-            },
-            complete() {
-                res.json(results);
-            }
+// Membuat tabel riwayat jika belum ada saat aplikasi dijalankan
+db.run(`CREATE TABLE IF NOT EXISTS sensor_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    suhu REAL,
+    kekeruhan INTEGER,
+    status TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
+// Variabel memori lokal untuk menyimpan pembacaan data terakhir
+let lastSensorData = {
+    suhu: null,
+    kekeruhan: null,
+    timestamp: null
+};
+
+// Flag pembantu anti-spam pesan Telegram
+let statusSuhuSebelumnyaAman = true;
+let statusKekeruhanSebelumnyaAman = true;
+
+// =========================================================================
+// ROUTES / API ENDPOINTS
+// =========================================================================
+
+/**
+ * 1. ENDPOINT POST: MENERIMA DATA DARI ESP32
+ * URL Tujuan di ESP32: http://<IP_LAPTOP_ANDA>:3000/api/sensors
+ */
+app.post('/api/sensors', (req, res) => {
+    // Mendukung pengiriman lewat JSON Body (req.body) maupun Parameter URL (req.query)
+    const suhu = req.body.suhu !== undefined ? req.body.suhu : req.query.suhu;
+    const kekeruhan = req.body.kekeruhan !== undefined ? req.body.kekeruhan : req.query.kekeruhan;
+
+    if (suhu === undefined || kekeruhan === undefined) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Gagal! Data suhu atau kekeruhan tidak terkirim." 
         });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
     }
+
+    const valSuhu = parseFloat(suhu);
+    const valTurbid = parseInt(kekeruhan);
+
+    // Hitung Status Ambang Batas Aman
+    let suhuAman = valSuhu >= 24 && valSuhu <= 29;
+    let airBersih = valTurbid <= 25;
+    let statusLingkungan = "AMAN";
+
+    if (!airBersih) {
+        statusLingkungan = "KERUH";
+    } else if (!suhuAman) {
+        statusLingkungan = "BAHAYA";
+    }
+
+    const waktuSekarang = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    // Simpan ke RAM sementara untuk dashboard real-time
+    lastSensorData = {
+        suhu: valSuhu,
+        kekeruhan: valTurbid,
+        timestamp: waktuSekarang
+    };
+
+    // SIMPAN PERMANEN KE DATABASE SQLITE
+    const queryInsert = `INSERT INTO sensor_logs (suhu, kekeruhan, status) VALUES (?, ?, ?)`;
+    db.run(queryInsert, [valSuhu, valTurbid, statusLingkungan], function(err) {
+        if (err) {
+            console.error("❌ Gagal menyimpan log ke database:", err.message);
+        }
+    });
+
+    // PENGIRIMAN NOTIFIKASI TELEGRAM (Sistem Anti-Spam)
+    if (!airBersih && statusKekeruhanSebelumnyaAman) {
+        sendTelegramNotification(`🚨 *MONITORING AIR AQUARIUM* 🚨\n\n⚠️ Air Aquarium Mendeteksi Kekeruhan Tinggi!\n💧 Kekeruhan: *${valTurbid} NTU* (Batas aman < 25 NTU)\n📢 *Saran:* Periksa kondisi saringan filter fisik.`);
+        statusKekeruhanSebelumnyaAman = false;
+    } else if (airBersih) {
+        statusKekeruhanSebelumnyaAman = true;
+    }
+
+    if (!suhuAman && statusSuhuSebelumnyaAman) {
+        sendTelegramNotification(`🚨 *MONITORING AIR AQUARIUM* 🚨\n\n⚠️ Temperatur Air Diluar Batas Ideal!\n🌡️ Suhu: *${valSuhu} °C* (Ideal: 24°C - 29°C)\n📢 *Saran:* Periksa heater atau pendingin ruangan.`);
+        statusSuhuSebelumnyaAman = false;
+    } else if (suhuAman) {
+        statusSuhuSebelumnyaAman = true;
+    }
+
+    console.log(`📥 Data Masuk Asli dari ESP32 -> Suhu: ${valSuhu}°C, Kekeruhan: ${valTurbid} NTU [${statusLingkungan}]`);
+    
+    return res.status(200).json({ 
+        success: true, 
+        message: "Data ESP32 berhasil diterima oleh Server!" 
+    });
 });
 
-// Jalankan HTTP Server di Port 3000
-const server = app.listen(3000, () => console.log('Web App berjalan di port 3000'));
+/**
+ * 2. ENDPOINT GET: Diakses dashboard untuk grafik dan panel atas
+ */
+app.get('/api/sensors', (req, res) => {
+    if (lastSensorData.suhu === null) {
+        return res.status(404).json({ message: "Belum ada data sensor dari alat asli." });
+    }
+    return res.json(lastSensorData);
+});
 
-// Gabungkan HTTP Server dengan WebSocket
-server.on('upgrade', (request, socket, head) => {
-    wss.handleUpgrade(request, socket, head, ws => {
-        wss.emit('connection', ws, request);
+/**
+ * 3. ENDPOINT GET ALL HISTORIES: Mengambil riwayat lama saat halaman dimuat ulang
+ */
+app.get('/api/sensors/history', (req, res) => {
+    const querySelect = `SELECT timestamp as "Waktu Record", suhu as "Suhu (C)", kekeruhan as "Kekeruhan (NTU)", status as "Status" FROM sensor_logs ORDER BY id DESC LIMIT 200`;
+    db.all(querySelect, [], (err, rows) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+        return res.json(rows);
     });
+});
+
+/**
+ * 4. ENDPOINT DELETE: Mengosongkan data permanen di database
+ */
+app.delete('/api/sensors/history', (req, res) => {
+    db.run(`DELETE FROM sensor_logs`, (err) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+        console.log("🗑️ Seluruh isi database sensor_logs telah dikosongkan!");
+        return res.json({ message: "Database berhasil dibersihkan!" });
+    });
+});
+
+app.listen(PORT, () => {
+    console.log(`🚀 Server berjalan mulus di http://localhost:${PORT}`);
 });
