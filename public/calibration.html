@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kalibrasi & Pengaturan - Monitoring Air Aquarium</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
+        .bubble {
+            position: absolute;
+            bottom: -20px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.05));
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(6, 182, 212, 0.2);
+            animation: floatUp 8s infinite ease-in;
+            pointer-events: none;
+        }
+        @keyframes floatUp {
+            0% { transform: translateY(0) translateX(0) scale(1); opacity: 0; }
+            10% { opacity: 0.8; }
+            90% { opacity: 0.8; }
+            100% { transform: translateY(-105vh) translateX(60px) scale(0.8); opacity: 0; }
+        }
+        .glow-particle {
+            position: absolute;
+            background: radial-gradient(circle, rgba(34, 211, 238, 0.4) 0%, rgba(34, 211, 238, 0) 70%);
+            border-radius: 50%;
+            animation: glowFloat 12s infinite ease-in-out;
+            pointer-events: none;
+        }
+        @keyframes glowFloat {
+            0%, 100% { transform: translateY(105vh) translateX(0) scale(1); opacity: 0; }
+            20% { opacity: 0.6; }
+            80% { opacity: 0.6; }
+            100% { transform: translateY(-10vh) translateX(100px) scale(1.5); opacity: 0; }
+        }
+        .ocean {
+            height: 15%;
+            width: 100%;
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            overflow: hidden;
+            z-index: 5;
+            pointer-events: none;
+        }
+        .wave {
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 200" fill="%231e3a8a"><path d="M0,80 C320,130 480,30 800,80 C1120,130 1280,30 1600,80 L1600,200 L0,200 Z"/></svg>') repeat-x;
+            position: absolute;
+            bottom: -1px;
+            width: 6400px;
+            height: 200px;
+            animation: wave 12s cubic-bezier(0.36, 0.45, 0.63, 0.53) infinite;
+            opacity: 0.6;
+        }
+        .wave:nth-of-type(2) {
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 200" fill="%232563eb"><path d="M0,90 C280,40 520,140 800,90 C1080,40 1320,140 1600,90 L1600,200 L0,200 Z"/></svg>') repeat-x;
+            bottom: 4px;
+            animation: wave 8s cubic-bezier(0.36, 0.45, 0.63, 0.53) -.125s infinite, swell 8s ease -1.25s infinite;
+            opacity: 0.3;
+        }
+        @keyframes wave {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-1600px); }
+        }
+        @keyframes swell {
+            0%, 100% { transform: translateY(-5px); }
+            50% { transform: translateY(10px); }
+        }
+        body { background: linear-gradient(to bottom, #0f172a, #1e3a8a, #0f172a); }
+    </style>
+</head>
+<body class="min-h-screen text-slate-100 relative overflow-x-hidden font-sans">
+
+    <!-- Animasi Latar -->
+    <div class="absolute inset-0 w-full h-full overflow-hidden pointer-events-none z-0">
+        <div class="absolute inset-0 bg-gradient-to-tr from-cyan-500/10 via-transparent to-blue-500/5 mix-blend-screen"></div>
+        <div class="glow-particle w-24 h-24 left-[15%]" style="animation-duration: 14s;"></div>
+        <div class="glow-particle w-32 h-32 left-[45%]" style="animation-duration: 18s; animation-delay: 3s;"></div>
+        <div class="glow-particle w-20 h-20 left-[75%]" style="animation-duration: 12s; animation-delay: 6s;"></div>
+        <div class="glow-particle w-40 h-40 left-[85%]" style="animation-duration: 22s; animation-delay: 1s;"></div>
+        <div class="bubble w-3 h-3 left-[8%]" style="animation-duration: 6s;"></div>
+        <div class="bubble w-5 h-5 left-[23%]" style="animation-duration: 9s; animation-delay: 1.5s;"></div>
+        <div class="bubble w-2 h-2 left-[40%]" style="animation-duration: 5s; animation-delay: 0.5s;"></div>
+        <div class="bubble w-4 h-4 left-[65%]" style="animation-duration: 10s; animation-delay: 3s;"></div>
+        <div class="bubble w-3 h-3 left-[82%]" style="animation-duration: 7s; animation-delay: 2s;"></div>
+        <div class="bubble w-6 h-6 left-[92%]" style="animation-duration: 11s; animation-delay: 4s;"></div>
+        <div class="ocean"><div class="wave"></div><div class="wave"></div></div>
+    </div>
+
+    <!-- Konten Utama -->
+    <div class="relative z-10 max-w-4xl mx-auto px-4 py-8">
+        <div class="bg-slate-900/60 backdrop-blur-lg border border-white/10 rounded-2xl p-6 shadow-2xl animate-fade-in-up">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold text-white flex items-center gap-2">🔧 Pengaturan & Kalibrasi</h1>
+                <a href="dashboard.html" class="text-cyan-400 hover:text-cyan-300 text-sm transition hover:scale-105">← Kembali ke Dashboard</a>
+            </div>
+
+            <!-- ================= FORM AMBANG BATAS ================= -->
+            <div class="bg-slate-800/50 rounded-xl p-4 mb-6 border border-white/5">
+                <h2 class="text-lg font-semibold text-cyan-300 mb-3">📊 Ambang Batas Notifikasi</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">Suhu Minimal (°C)</label>
+                        <input type="number" id="suhu_min" step="0.1" class="w-full bg-slate-700/80 rounded-lg px-3 py-2 text-white border border-slate-600 focus:ring-2 focus:ring-cyan-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">Suhu Maksimal (°C)</label>
+                        <input type="number" id="suhu_max" step="0.1" class="w-full bg-slate-700/80 rounded-lg px-3 py-2 text-white border border-slate-600 focus:ring-2 focus:ring-cyan-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">NTU Maksimal</label>
+                        <input type="number" id="ntu_max" step="1" class="w-full bg-slate-700/80 rounded-lg px-3 py-2 text-white border border-slate-600 focus:ring-2 focus:ring-cyan-500">
+                    </div>
+                </div>
+                <button onclick="saveThresholds()" class="mt-3 bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-xl text-sm font-bold transition">💾 Simpan Ambang Batas</button>
+                <span id="thresholds_msg" class="ml-3 text-xs text-green-400"></span>
+            </div>
+
+            <!-- ================= FORM KALIBRASI ================= -->
+            <div class="bg-slate-800/50 rounded-xl p-4 border border-white/5">
+                <h2 class="text-lg font-semibold text-cyan-300 mb-3">🔧 Kalibrasi Sensor Kekeruhan (Dua Titik)</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">ADC Air Jernih</label>
+                        <input type="number" id="adc_clear" placeholder="Contoh: 1960" class="w-full bg-slate-700/80 rounded-lg px-3 py-2 text-white border border-slate-600 focus:ring-2 focus:ring-cyan-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">ADC Air Keruh</label>
+                        <input type="number" id="adc_turbid" placeholder="Contoh: 1700" class="w-full bg-slate-700/80 rounded-lg px-3 py-2 text-white border border-slate-600 focus:ring-2 focus:ring-cyan-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">NTU Air Keruh (estimasi)</label>
+                        <input type="number" id="ntu_turbid" placeholder="Contoh: 30" class="w-full bg-slate-700/80 rounded-lg px-3 py-2 text-white border border-slate-600 focus:ring-2 focus:ring-cyan-500">
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <label class="block text-slate-300 text-sm mb-1">IP Address ESP32 (opsional, untuk kirim otomatis)</label>
+                    <input type="text" id="esp32_ip" placeholder="192.168.x.x" class="w-full md:w-1/2 bg-slate-700/80 rounded-lg px-3 py-2 text-white border border-slate-600 focus:ring-2 focus:ring-cyan-500">
+                </div>
+                <button onclick="calibrate()" class="mt-3 bg-green-600 hover:bg-green-500 px-4 py-2 rounded-xl text-sm font-bold transition">📐 Hitung & Kirim Kalibrasi</button>
+                <span id="calibration_msg" class="ml-3 text-xs text-green-400"></span>
+            </div>
+
+            <!-- Hasil kalibrasi -->
+            <div id="result" class="hidden mt-4 bg-slate-950/80 border border-cyan-500/30 rounded-xl p-4">
+                <p class="text-sm font-mono" id="result-text"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Cek role admin, jika tidak admin redirect
+        const role = localStorage.getItem('role');
+        if (role !== 'admin') {
+            alert('Halaman ini hanya untuk admin. Redirect ke dashboard.');
+            window.location.href = 'dashboard.html';
+        }
+
+        // ================= AMBANG BATAS =================
+        async function loadThresholds() {
+            try {
+                const res = await fetch('/api/thresholds');
+                const data = await res.json();
+                document.getElementById('suhu_min').value = data.suhu_min;
+                document.getElementById('suhu_max').value = data.suhu_max;
+                document.getElementById('ntu_max').value = data.ntu_max;
+            } catch(e) { console.error(e); }
+        }
+
+        async function saveThresholds() {
+            const suhu_min = parseFloat(document.getElementById('suhu_min').value);
+            const suhu_max = parseFloat(document.getElementById('suhu_max').value);
+            const ntu_max = parseInt(document.getElementById('ntu_max').value);
+            const msgSpan = document.getElementById('thresholds_msg');
+            try {
+                const res = await fetch('/api/thresholds', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ suhu_min, suhu_max, ntu_max, role: localStorage.getItem('role') })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    msgSpan.innerText = '✓ Ambang batas tersimpan';
+                    setTimeout(() => msgSpan.innerText = '', 3000);
+                    loadThresholds(); // refresh
+                } else {
+                    alert('Gagal: ' + result.message);
+                }
+            } catch(e) { alert('Error: ' + e.message); }
+        }
+
+        // ================= KALIBRASI =================
+        async function calibrate() {
+            const adc_clear = parseInt(document.getElementById('adc_clear').value);
+            const adc_turbid = parseInt(document.getElementById('adc_turbid').value);
+            const ntu_turbid = parseInt(document.getElementById('ntu_turbid').value);
+            const esp32_ip = document.getElementById('esp32_ip').value;
+            const msgSpan = document.getElementById('calibration_msg');
+            const resultDiv = document.getElementById('result');
+            const resultText = document.getElementById('result-text');
+
+            if (!adc_clear || !adc_turbid || !ntu_turbid) {
+                alert('Isi semua data kalibrasi (ADC jernih, ADC keruh, NTU keruh)');
+                return;
+            }
+            try {
+                const res = await fetch('/api/calibration', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        adc_clear, adc_turbid, ntu_turbid, esp32_ip,
+                        role: localStorage.getItem('role')
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    resultText.innerHTML = `✅ Kalibrasi berhasil!<br>Slope (m): ${data.slope_m.toFixed(6)}<br>Intercept (c): ${data.intercept_c.toFixed(2)}<br>Persamaan: NTU = ${data.slope_m.toFixed(6)} * ADC + ${data.intercept_c.toFixed(2)}<br>${data.esp32_response ? (data.esp32_response.error ? '⚠️ Gagal kirim ke ESP32: '+data.esp32_response.error : '✅ Berhasil dikirim ke ESP32') : 'ℹ️ Tidak dikirim ke ESP32 (IP kosong)'}`;
+                    resultDiv.classList.remove('hidden');
+                    msgSpan.innerText = '✓ Kalibrasi tersimpan di server';
+                    setTimeout(() => msgSpan.innerText = '', 3000);
+                } else {
+                    alert('Kalibrasi gagal: ' + data.message);
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        // Load data saat halaman dimuat
+        loadThresholds();
+    </script>
+</body>
+</html>

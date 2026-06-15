@@ -150,7 +150,6 @@
                     body: JSON.stringify({ username, password })
                 });
 
-                // Coba parse response sebagai JSON
                 let data;
                 try {
                     data = await res.json();
@@ -159,6 +158,9 @@
                 }
 
                 if (data.success) {
+                    // Simpan role dan username ke localStorage untuk digunakan di dashboard
+                    localStorage.setItem('role', data.role);
+                    localStorage.setItem('username', data.username);
                     window.location.href = '/dashboard.html';
                 } else {
                     btnText.innerText = "Masuk ke Dashboard";
